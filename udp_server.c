@@ -70,9 +70,9 @@ int main (int argc, char * argv[] )
     //waits for an incoming message
 	nbytes = recvfrom(sock,buffer,MAXBUFSIZE,0,(struct sockaddr *) &sin, &remote_length);
 
-	printf("The client says %s\n", buffer);
+	printf("Client ping %s\n", buffer);
 
-	char msg[] = "orange";
+	char msg[] = "success";
 	nbytes = sendto(sock,msg,sizeof(msg),0,(struct sockaddr *) &sin, remote_length);
 
     start_service(sock,sendbuffer,recvbuffer,sin,remote_length);
@@ -82,7 +82,7 @@ int main (int argc, char * argv[] )
 
 
 
-void start_service(int sock, void *sendbuf, void *recvbuf, struct sockaddr_in sock_addr, socklen_t addrlen){
+void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in sock_addr, socklen_t addrlen){
 
 
     int nbytes;
@@ -90,11 +90,10 @@ void start_service(int sock, void *sendbuf, void *recvbuf, struct sockaddr_in so
         bzero(recvbuf,RECVBUF_SIZE);
         //waits for an incoming message
     	nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+        printf("Command Received: %s\n",recvbuf);
 
-        printf("Bytes received: %d\n", nbytes);
         //Exit command received
         if(!strncmp(recvbuf,"exit",nbytes)){
-            printf("exit\n");
             nbytes = sendto(sock,"exit",4,0,(struct sockaddr *) &sock_addr, addrlen);
             close(sock);
             exit(0);

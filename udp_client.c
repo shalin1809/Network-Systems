@@ -55,7 +55,7 @@ int main (int argc, char * argv[])
 	  it will report an error if the message   fails to leave the computer
 	  however, with UDP, there is no error if the message is lost in the network once it leaves the computer.
 	 ******************/
-	char command[256] = "apple";
+	char command[256] = "success";
 	nbytes = sendto(sock,command,sizeof(command),0,(struct sockaddr *) &remote, remote_length);
 
 	// Blocks till bytes are received
@@ -63,27 +63,25 @@ int main (int argc, char * argv[])
 	int addr_length = sizeof(struct sockaddr);
 	bzero(buffer,sizeof(buffer));
 	nbytes = recvfrom(sock,buffer,MAXBUFSIZE,0,(struct sockaddr *) &remote, &remote_length);
+    printf("Server ping %s\n", buffer);
+
 
     while (1) {
         bzero(command,sizeof(command));
-    	printf("Server says %s\n", buffer);
-        printf("Waiting for command:\n");
+    	printf("Waiting for command:\n");
         int command_length;
         scanf("%s", command);
         command_length = strlen(command);
-        printf("Command length:%d\n",command_length);
 
-        // memcpy(command,"exit",4);
     	nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &remote, remote_length);
 
         bzero(buffer,sizeof(buffer));
     	nbytes = recvfrom(sock,buffer,MAXBUFSIZE,0,(struct sockaddr *) &remote, &remote_length);
-        printf("Server: %s\n", buffer);
         if(!strncmp(buffer,"exit",nbytes)){
-            printf("exit\n");
             close(sock);
             exit(0);
         }
+        printf("Server: %s\n", buffer);
     }
 
 	close(sock);
