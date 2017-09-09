@@ -86,20 +86,24 @@ void start_service(int sock, void *sendbuf, void *recvbuf, struct sockaddr_in so
 
 
     int nbytes;
+    while(1){
+        bzero(recvbuf,RECVBUF_SIZE);
+        //waits for an incoming message
+    	nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
 
-    bzero(recvbuf,RECVBUF_SIZE);
-    //waits for an incoming message
-	nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+        printf("Bytes received: %d\n", nbytes);
+        //Exit command received
+        if(!strncmp(recvbuf,"exit",nbytes)){
+            printf("exit\n");
+            nbytes = sendto(sock,"exit",4,0,(struct sockaddr *) &sock_addr, addrlen);
+            close(sock);
+            exit(0);
+        }
+        //Command not found
+        else{
+            nbytes = sendto(sock,recvbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
+        }
 
-    //Exit command received
-    if(strcmp(recvbuf,"exit")){
-        printf("exit\n");
-        close(sock);
-        exit(0);
-    }
-    //Command not found
-    else{
-        nbytes = sendto(sock,recvbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
     }
 
     exit(0);

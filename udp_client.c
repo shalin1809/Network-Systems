@@ -33,7 +33,7 @@ int main (int argc, char * argv[])
 	}
 
 	/******************
-	  Here we populate a sockaddr_in struct with
+	   Here we populate a sockaddr_in struct with
 	  information regarding where we'd like to send our packet
 	  i.e the Server.
 	 ******************/
@@ -52,10 +52,10 @@ int main (int argc, char * argv[])
 
 	/******************
 	  sendto() sends immediately.
-	  it will report an error if the message fails to leave the computer
+	  it will report an error if the message   fails to leave the computer
 	  however, with UDP, there is no error if the message is lost in the network once it leaves the computer.
 	 ******************/
-	char command[] = "apple";
+	char command[256] = "apple";
 	nbytes = sendto(sock,command,sizeof(command),0,(struct sockaddr *) &remote, remote_length);
 
 	// Blocks till bytes are received
@@ -64,12 +64,27 @@ int main (int argc, char * argv[])
 	bzero(buffer,sizeof(buffer));
 	nbytes = recvfrom(sock,buffer,MAXBUFSIZE,0,(struct sockaddr *) &remote, &remote_length);
 
-	printf("Server says %s\n", buffer);
-    printf("Waiting for command:\n", );
+    while (1) {
+        bzero(command,sizeof(command));
+    	printf("Server says %s\n", buffer);
+        printf("Waiting for command:\n");
+        int command_length;
+        scanf("%s", command);
+        command_length = strlen(command);
+        printf("Command length:%d\n",command_length);
 
+        // memcpy(command,"exit",4);
+    	nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &remote, remote_length);
 
-    memcpy(command,"exit",4);
-	nbytes = sendto(sock,command,sizeof(command),0,(struct sockaddr *) &remote, remote_length);
+        bzero(buffer,sizeof(buffer));
+    	nbytes = recvfrom(sock,buffer,MAXBUFSIZE,0,(struct sockaddr *) &remote, &remote_length);
+        printf("Server: %s\n", buffer);
+        if(!strncmp(buffer,"exit",nbytes)){
+            printf("exit\n");
+            close(sock);
+            exit(0);
+        }
+    }
 
 	close(sock);
 
