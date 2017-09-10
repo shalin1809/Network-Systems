@@ -14,9 +14,12 @@
 #include <errno.h>
 
 #define MAXBUFSIZE 100
+#define SENDBUF_SIZE 1024
+#define RECVBUF_SIZE 1024
+
+void start_service();
 
 /* You will have to modify the program below */
-
 int main (int argc, char * argv[])
 {
 
@@ -25,6 +28,7 @@ int main (int argc, char * argv[])
 	char buffer[MAXBUFSIZE];
     unsigned int remote_length;
 	struct sockaddr_in remote;              //"Internet socket address structure"
+    char sendbuffer[SENDBUF_SIZE], recvbuffer[RECVBUF_SIZE]; //Buffer for sending and receiving data
 
 	if (argc < 3)
 	{
@@ -66,24 +70,38 @@ int main (int argc, char * argv[])
     printf("Server ping %s\n", buffer);
 
 
+    start_service(sock,sendbuffer,recvbuffer,remote,remote_length);
+
+	close(sock);
+}
+
+
+
+void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in sock_addr, socklen_t addrlen){
+
+    char command[256];
+    int nbytes, command_length;
+    printf("Commands accepted\nls\nget [file_name]\nput [file_name]\ndelete[file_name]");
+    printf("\nexit\nWaiting for command:\n");
     while (1) {
+        //Clear the command buffer
         bzero(command,sizeof(command));
-    	printf("Waiting for command:\n");
-        int command_length;
+
+        //Command input
         scanf("%s", command);
         command_length = strlen(command);
-
-    	nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &remote, remote_length);
-
-        bzero(buffer,sizeof(buffer));
-    	nbytes = recvfrom(sock,buffer,MAXBUFSIZE,0,(struct sockaddr *) &remote, &remote_length);
-        if(!strncmp(buffer,"exit",nbytes)){
+        //Send command to server
+        nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &sock_addr, addrlen);
+        //Clear the receive buffer
+        bzero(recvbuf,RECVBUF_SIZE);
+        //Receive reply from server
+        nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+        if(!strncmp(recvbuf,"exit",nbytes)){
             close(sock);
             exit(0);
         }
-        printf("Server: %s\n", buffer);
+        //Print what the server responded
+        printf("Server: %s\n", recvbuf);
     }
-
-	close(sock);
 
 }

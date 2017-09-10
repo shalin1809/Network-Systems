@@ -84,27 +84,40 @@ int main (int argc, char * argv[] )
 
 void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in sock_addr, socklen_t addrlen){
 
-
     int nbytes;
+
     while(1){
+        //Clear the receive buffer
         bzero(recvbuf,RECVBUF_SIZE);
         //waits for an incoming message
     	nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
         printf("Command Received: %s\n",recvbuf);
 
+        //ls command
+        if(!strncmp(recvbuf,"ls",nbytes)){
+            printf("Sending filenames in directory\n");
+        }
+        else if (!strncmp(recvbuf,"get",nbytes)){
+            printf("Sending file\n");
+        }
+        else if (!strncmp(recvbuf,"put",nbytes)){
+            printf("Receiving file\n");
+        }
+        else if (!strncmp(recvbuf,"delete",nbytes)){
+            printf("Deleting file\n");
+        }
         //Exit command received
-        if(!strncmp(recvbuf,"exit",nbytes)){
+        else if(!strncmp(recvbuf,"exit",nbytes)){
             nbytes = sendto(sock,"exit",4,0,(struct sockaddr *) &sock_addr, addrlen);
             close(sock);
             exit(0);
         }
         //Command not found
         else{
-            nbytes = sendto(sock,recvbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
+            strncpy(sendbuf,recvbuf,nbytes); //Echo the command back to the client unmodified
         }
-
+        nbytes = sendto(sock,sendbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
     }
 
     exit(0);
-
 }
