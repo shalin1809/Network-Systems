@@ -85,10 +85,10 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
     printf("\nexit\nWaiting for command:\n");
     while (1) {
         //Clear the command buffer
-        bzero(command,sizeof(command));
+        memset(command,0,sizeof(command));
 
         //Command input
-        scanf("%s", command);
+        gets(command);
         command_length = strlen(command);
         //Send command to server
         nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &sock_addr, addrlen);
@@ -96,7 +96,7 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
         bzero(recvbuf,RECVBUF_SIZE);
         //Receive reply from server
         nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
-        if(!strncmp(recvbuf,"exit",nbytes)){
+        if((!strncmp(recvbuf,"exit",nbytes))&&nbytes!=0){
             close(sock);
             exit(0);
         }

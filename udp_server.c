@@ -16,13 +16,16 @@
 /* You will have to modify the program below */
 
 #define MAXBUFSIZE 100
-#define SENDBUF_SIZE 1024
-#define RECVBUF_SIZE 1024
+#define SENDBUF_SIZE 2048
+#define RECVBUF_SIZE 2048
 
 
 void start_service();
 
 int get_file_size(char *fd);
+char * get_file_name(char * recvbuf);
+void delete_file(char * filename);
+
 
 
 int main (int argc, char * argv[] )
@@ -97,46 +100,65 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
     	nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
         printf("Command Received: %s\n",recvbuf);
 
-        //ls command
-        if(!strncmp(recvbuf,"ls",nbytes)){
-            printf("Sending filenames in directory\n");
-            system("ls > filenames.txt");
+        if(nbytes!= 0){
+            /**** ls ****/
+            if(!strncmp(recvbuf,"ls",nbytes)){
+                printf("Sending filenames in directory\n");
+                system("ls > filenames.txt");
 
-            char *fd = "filenames.txt";
-            fp = fopen(fd,"r");
-            if(fp==NULL){
-                printf("file does not exist\n");
+                char *filename = "filenames.txt";
+                fp = fopen(filename,"r");
+                if(fp==NULL){
+                    printf("file does not exist\n");
+                }
+                file_size = get_file_size(filename);
+                if(fread(sendbuf,file_size,1,fp)<=0)
+                {
+                  printf("unable to copy file into buffer\n");
+                  exit(1);
+                }
+                nbytes = file_size;
+                fclose(fp);
             }
-            file_size = get_file_size(fd);
-            if(fread(sendbuf,file_size,1,fp)<=0)
-            {
-              printf("unable to copy file into buffer\n");
-              exit(1);
+
+            /**** get file ****/
+            else if (!strncmp(recvbuf,"get ",4)){
+                printf("Sending file\n");
+                bzero(sendbuf,SENDBUF_SIZE);
+                nbytes = 0;
+                char * filename = get_file_name(recvbuf);
+                //Handle if no filename after get
             }
-            nbytes = file_size;
+
+            /**** put file ****/
+            else if (!strncmp(recvbuf,"put ",4)){
+                printf("Receiving file\n");
+                // Prepare to receive file
+
+            }
+
+            /**** delete file ****/
+            else if (!strncmp(recvbuf,"delete ",7)){
+                //Handle if no filename after delete
+                char * filename = get_file_name(recvbuf);
+                printf("Deleting file %s\n",filename);
+                delete_file(filename);
+                bzero(sendbuf,SENDBUF_SIZE);
+                nbytes = 0;
+            }
+
+            /**** Close socket and exit ****/
+            else if(!strncmp(recvbuf,"exit",nbytes)){
+                nbytes = sendto(sock,"exit",4,0,(struct sockaddr *) &sock_addr, addrlen);
+                close(sock);
+                exit(0);
+            }
+            /**** Command not found, ECHO ****/
+            else{
+                strncpy(sendbuf,recvbuf,nbytes); //Echo the command back to the client unmodified
+            }
         }
-        else if (!strncmp(recvbuf,"get",nbytes)){
-            printf("Sending file\n");
-            //Handle if no filename after get
-        }
-        else if (!strncmp(recvbuf,"put",nbytes)){
-            printf("Receiving file\n");
-            // Prepare to receive file
-        }
-        else if (!strncmp(recvbuf,"delete",nbytes)){
-            printf("Deleting file\n");
-            //Handle if no filename after delete
-        }
-        //Exit command received
-        else if(!strncmp(recvbuf,"exit",nbytes)){
-            nbytes = sendto(sock,"exit",4,0,(struct sockaddr *) &sock_addr, addrlen);
-            close(sock);
-            exit(0);
-        }
-        //Command not found
-        else{
-            strncpy(sendbuf,recvbuf,nbytes); //Echo the command back to the client unmodified
-        }
+
         nbytes = sendto(sock,sendbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
     }
 
@@ -145,10 +167,28 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
 
 
 
-int get_file_size(char *fd){
+int get_file_size(char *filename){
 
     struct stat buf;
-    stat(fd, &buf);
+    stat(filename, &buf);
     int size = buf.st_size;
     return size;
+}
+
+char * get_file_name(char * recvbuf){
+
+    char* filename = memchr(recvbuf,32,7);
+    printf("Filename is: %s\n",filename);
+    return (filename + 1);
+}
+
+
+
+void delete_file(char * filename){
+
+    char command[256];
+    bzero(command,sizeof(command));
+    strcat(command, "rm -f ");
+    strcat(command, filename);
+    system(command);
 }
