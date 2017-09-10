@@ -124,7 +124,6 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
             /**** get file ****/
             else if (!strncmp(recvbuf,"get ",4)){
                 printf("Sending file\n");
-                bzero(sendbuf,SENDBUF_SIZE);
                 nbytes = 0;
                 char * filename = get_file_name(recvbuf);
                 //Handle if no filename after get
@@ -141,10 +140,15 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
             else if (!strncmp(recvbuf,"delete ",7)){
                 //Handle if no filename after delete
                 char * filename = get_file_name(recvbuf);
-                printf("Deleting file %s\n",filename);
-                delete_file(filename);
-                bzero(sendbuf,SENDBUF_SIZE);
-                nbytes = 0;
+                if(filename == NULL){
+                    strcat(sendbuf,"File does not exist");
+                    nbytes = strlen(sendbuf);
+                }
+                else{
+                    printf("Deleting file %s\n",filename);
+                    delete_file(filename);
+                    nbytes = 0;
+                }
             }
 
             /**** Close socket and exit ****/
@@ -160,13 +164,14 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
         }
 
         nbytes = sendto(sock,sendbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
+        bzero(sendbuf,SENDBUF_SIZE);
     }
 
     exit(0);
 }
 
 
-
+/* Get the file size in bytes */
 int get_file_size(char *filename){
 
     struct stat buf;
@@ -175,11 +180,20 @@ int get_file_size(char *filename){
     return size;
 }
 
+/* Find the space character and return string after the space character*/
 char * get_file_name(char * recvbuf){
 
     char* filename = memchr(recvbuf,32,7);
+    filename += 1;  //Increment by 1 to avoid the space character
     printf("Filename is: %s\n",filename);
-    return (filename + 1);
+    FILE *fp;
+    fp = fopen(filename,"r");
+    if(fp == NULL ){
+        printf("File does not exist\n");
+        return NULL;
+    }
+    fclose(fp);
+    return filename;
 }
 
 

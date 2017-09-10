@@ -101,7 +101,7 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
             exit(0);
         }
         //Print what the server responded
-        printf("Server: %s\n", recvbuf);
+        printf("Server: %s\n\n", recvbuf);
     }
 
 }
