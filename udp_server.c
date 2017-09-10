@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <memory.h>
 #include <string.h>
+#include <sys/stat.h>
 /* You will have to modify the program below */
 
 #define MAXBUFSIZE 100
@@ -20,6 +21,8 @@
 
 
 void start_service();
+
+int get_file_size(char *fd);
 
 
 int main (int argc, char * argv[] )
@@ -84,7 +87,8 @@ int main (int argc, char * argv[] )
 
 void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in sock_addr, socklen_t addrlen){
 
-    int nbytes;
+    int nbytes, file_size;
+    FILE *fp;
 
     while(1){
         //Clear the receive buffer
@@ -96,15 +100,32 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
         //ls command
         if(!strncmp(recvbuf,"ls",nbytes)){
             printf("Sending filenames in directory\n");
+            system("ls > filenames.txt");
+
+            char *fd = "filenames.txt";
+            fp = fopen(fd,"r");
+            if(fp==NULL){
+                printf("file does not exist\n");
+            }
+            file_size = get_file_size(fd);
+            if(fread(sendbuf,file_size,1,fp)<=0)
+            {
+              printf("unable to copy file into buffer\n");
+              exit(1);
+            }
+            nbytes = file_size;
         }
         else if (!strncmp(recvbuf,"get",nbytes)){
             printf("Sending file\n");
+            //Handle if no filename after get
         }
         else if (!strncmp(recvbuf,"put",nbytes)){
             printf("Receiving file\n");
+            // Prepare to receive file
         }
         else if (!strncmp(recvbuf,"delete",nbytes)){
             printf("Deleting file\n");
+            //Handle if no filename after delete
         }
         //Exit command received
         else if(!strncmp(recvbuf,"exit",nbytes)){
@@ -120,4 +141,14 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
     }
 
     exit(0);
+}
+
+
+
+int get_file_size(char *fd){
+
+    struct stat buf;
+    stat(fd, &buf);
+    int size = buf.st_size;
+    return size;
 }
