@@ -21,7 +21,6 @@
 
 
 void start_service();
-
 int get_file_size(char *fd);
 char * get_file_name(char * recvbuf);
 void delete_file(char * filename);
@@ -126,6 +125,24 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
                 printf("Sending file\n");
                 nbytes = 0;
                 char * filename = get_file_name(recvbuf);
+                if(filename == NULL){
+                    strcat(sendbuf,"File does not exist");
+                    nbytes = strlen(sendbuf);
+                }
+                else{
+                    fp = fopen(filename,"r");
+                    if(fp==NULL){
+                        printf("File does not exist\n");
+                    }
+                    file_size = get_file_size(filename);
+                    if(fread(sendbuf,file_size,1,fp)<=0)
+                    {
+                      printf("Unable to copy file into buffer\n");
+                      exit(1);
+                    }
+                    nbytes = file_size;
+                    fclose(fp);
+                }
                 //Handle if no filename after get
             }
 
@@ -197,7 +214,7 @@ char * get_file_name(char * recvbuf){
 }
 
 
-
+/* Performs a system call to delete the filename received */
 void delete_file(char * filename){
 
     char command[256];

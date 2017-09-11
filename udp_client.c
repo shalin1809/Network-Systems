@@ -14,8 +14,8 @@
 #include <errno.h>
 
 #define MAXBUFSIZE 100
-#define SENDBUF_SIZE 1024
-#define RECVBUF_SIZE 1024
+#define SENDBUF_SIZE 2048
+#define RECVBUF_SIZE 2048
 
 void start_service();
 
@@ -94,11 +94,30 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
         nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &sock_addr, addrlen);
         //Clear the receive buffer
         bzero(recvbuf,RECVBUF_SIZE);
-        //Receive reply from server
-        nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
-        if((!strncmp(recvbuf,"exit",nbytes))&&nbytes!=0){
-            close(sock);
-            exit(0);
+
+        if(!strncmp(command,"get ",4)){
+            char *filename = (command + 4); //
+            nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+            if(!strncmp(recvbuf,"File does not exist",19)){
+                //Print what the server responded
+                printf("Server: %s\n\n", recvbuf);
+                continue;
+            }
+            FILE *fp;
+            fp = fopen("received","w+");
+            if(fwrite(recvbuf,nbytes,1,fp)<0){
+              printf("Cannot save file\n");
+              exit(1);
+            }
+            fclose(fp);
+        }
+        else{
+            //Receive reply from server
+            nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+            if((!strncmp(recvbuf,"exit",nbytes))&&nbytes!=0){
+                close(sock);
+                exit(0);
+            }
         }
         //Print what the server responded
         printf("Server: %s\n\n", recvbuf);
