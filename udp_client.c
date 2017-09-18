@@ -12,12 +12,14 @@
 #include <stdlib.h>
 #include <memory.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #define MAXBUFSIZE 100
 #define SENDBUF_SIZE 2048
-#define RECVBUF_SIZE 2048
+#define RECVBUF_SIZE 1024
 
 void start_service();
+int get_file_size();
 
 /* You will have to modify the program below */
 int main (int argc, char * argv[])
@@ -89,27 +91,65 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
 
         //Command input
         gets(command);
-        command_length = strlen(command);
+
+repeat: command_length = strlen(command);
         //Send command to server
         nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &sock_addr, addrlen);
         //Clear the receive buffer
         bzero(recvbuf,RECVBUF_SIZE);
 
         if(!strncmp(command,"get ",4)){
-            char *filename = (command + 4); //
+            char *filename = (command + 4); //Get file name
+            FILE *fp;
             nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
             if(!strncmp(recvbuf,"File does not exist",19)){
                 //Print what the server responded
                 printf("Server: %s\n\n", recvbuf);
                 continue;
             }
-            FILE *fp;
-            fp = fopen("received","w+");
-            if(fwrite(recvbuf,nbytes,1,fp)<0){
-              printf("Cannot save file\n");
-              exit(1);
+            else if(!strncmp(recvbuf,"Sending File ",13)){
+                int no_of_packet, file_size;
+                char temp[20];
+                sscanf(recvbuf,"%s %s %d %d",temp,temp,&no_of_packet,&file_size);
+                printf("Received: %s %d %d\n",temp,no_of_packet,file_size);
+                fp = fopen("received","a+");
+                bzero(recvbuf,RECVBUF_SIZE);
+                for(no_of_packet;no_of_packet>0;no_of_packet--){
+                    nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+                    fwrite(recvbuf,nbytes,1,fp);
+                    if(!strncmp(recvbuf,"endoffile",9)){
+                        goto eof;
+                    }
+                    bzero(recvbuf,RECVBUF_SIZE);
+                    //printf("Received packet: %d\n", no_of_packet);
+                }
+                nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+                printf("Outside for: %s\n\n", recvbuf);
+                if(!strncmp(recvbuf,"endoffile",9)){
+eof:                printf("Received endoffile\n");
+                    fclose(fp);
+                    printf("The file sizes are %d  %d\n",file_size,get_file_size("received"));
+                    if(file_size == get_file_size(fp)){
+                        strcpy(command,"success");
+                        printf("Received file size is: %d\n", file_size);
+                        nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &sock_addr, addrlen);
+                        bzero(recvbuf,RECVBUF_SIZE);
+                        nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+                    }
+                    else {
+                        printf("File size is not same\n");
+                        system("rm -f received");
+                        goto repeat;
+                    }
+                }
             }
-            fclose(fp);
+            // FILE *fp;
+            // fp = fopen("received","w+");
+            // if(fwrite(recvbuf,nbytes,1,fp)<0){
+            //   printf("Cannot save file\n");
+            //   exit(1);
+            // }
+
         }
         else{
             //Receive reply from server
@@ -121,6 +161,18 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
         }
         //Print what the server responded
         printf("Server: %s\n\n", recvbuf);
+        bzero(recvbuf,RECVBUF_SIZE);
     }
 
+}
+
+
+
+/* Get the file size in bytes */
+int get_file_size(char *filename){
+
+    struct stat buf;
+    stat(filename, &buf);
+    int size = buf.st_size;
+    return size;
 }

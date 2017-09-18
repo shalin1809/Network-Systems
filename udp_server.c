@@ -16,7 +16,7 @@
 /* You will have to modify the program below */
 
 #define MAXBUFSIZE 100
-#define SENDBUF_SIZE 2048
+#define SENDBUF_SIZE 1024
 #define RECVBUF_SIZE 2048
 
 
@@ -135,12 +135,33 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
                         printf("File does not exist\n");
                     }
                     file_size = get_file_size(filename);
-                    if(fread(sendbuf,file_size,1,fp)<=0)
-                    {
-                      printf("Unable to copy file into buffer\n");
-                      exit(1);
-                    }
-                    nbytes = file_size;
+                    int packet, max_packets = file_size/SENDBUF_SIZE;
+                    sprintf(sendbuf,"Sending File %d %d",max_packets+1,file_size);
+                    nbytes = strlen(sendbuf);
+                    printf("File ready: %s %d\n", sendbuf, nbytes);
+                    nbytes = sendto(sock,sendbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
+                    for(packet = 0;packet<=max_packets;packet++){
+                        fseek(fp,packet*SENDBUF_SIZE,SEEK_SET);
+                        fread(sendbuf,SENDBUF_SIZE,1,fp);
+                        if(max_packets - packet){
+                            nbytes = SENDBUF_SIZE;
+                        }
+                        else{
+                            nbytes = (file_size - SENDBUF_SIZE*packet);
+                            printf("Sending packet: %d\n",packet);
+                        }
+                        nbytes = sendto(sock,sendbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
+                        bzero(sendbuf,SENDBUF_SIZE);                    }
+                    // if(fread(sendbuf,file_size,1,fp)<=0)
+                    // {
+                    //   printf("Unable to copy file into buffer\n");
+                    //   exit(1);
+                    //
+                    // }
+                    // nbytes = file_size;
+                    printf("Reached endoffile\n");
+                    strcpy(sendbuf,"endoffile");
+                    nbytes = 9;
                     fclose(fp);
                 }
                 //Handle if no filename after get
