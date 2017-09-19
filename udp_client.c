@@ -16,7 +16,8 @@
 
 #define MAXBUFSIZE 100
 #define SENDBUF_SIZE 2048
-#define RECVBUF_SIZE 1024
+#define RECVBUF_SIZE 1000
+#define RECVBUF_PACKET_SIZE 1024
 
 void start_service();
 int get_file_size();
@@ -108,28 +109,34 @@ repeat: command_length = strlen(command);
                 continue;
             }
             else if(!strncmp(recvbuf,"Sending File ",13)){
-                int no_of_packet, file_size;
+                int no_of_packet, file_size, current_packet=0;
                 char temp[20];
                 sscanf(recvbuf,"%s %s %d %d",temp,temp,&no_of_packet,&file_size);
                 printf("Received: %s %d %d\n",temp,no_of_packet,file_size);
-                fp = fopen("received","a+");
-                bzero(recvbuf,RECVBUF_SIZE);
-                for(no_of_packet;no_of_packet>0;no_of_packet--){
-                    nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
-                    fwrite(recvbuf,nbytes,1,fp);
+                fp = fopen("received","w+");
+                bzero(recvbuf,RECVBUF_PACKET_SIZE);
+                for(current_packet;current_packet<no_of_packet;current_packet++){
+                    nbytes = recvfrom(sock,recvbuf,RECVBUF_PACKET_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+                    sscanf(recvbuf,"%d ",&current_packet);
+                    fseek(fp,current_packet*RECVBUF_SIZE,SEEK_SET);
+                    fwrite((recvbuf+24),(nbytes-24),1,fp);
                     if(!strncmp(recvbuf,"endoffile",9)){
                         goto eof;
                     }
-                    bzero(recvbuf,RECVBUF_SIZE);
-                    //printf("Received packet: %d\n", no_of_packet);
+                    bzero(recvbuf,RECVBUF_PACKET_SIZE);
+                    bzero(sendbuf,SENDBUF_SIZE);
+                    sprintf(sendbuf,"ACK %d",current_packet);
+                    nbytes = sendto(sock,sendbuf,SENDBUF_SIZE,0,(struct sockaddr *) &sock_addr, addrlen);
+                    //printf("Received packet: %d\n", current_packet);
                 }
                 nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+                printf("Outside for packet: %d\n\n", current_packet);
                 printf("Outside for: %s\n\n", recvbuf);
                 if(!strncmp(recvbuf,"endoffile",9)){
 eof:                printf("Received endoffile\n");
                     fclose(fp);
                     printf("The file sizes are %d  %d\n",file_size,get_file_size("received"));
-                    if(file_size == get_file_size(fp)){
+                    if((file_size) == get_file_size(fp)){
                         strcpy(command,"success");
                         printf("Received file size is: %d\n", file_size);
                         nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &sock_addr, addrlen);

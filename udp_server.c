@@ -16,7 +16,8 @@
 /* You will have to modify the program below */
 
 #define MAXBUFSIZE 100
-#define SENDBUF_SIZE 1024
+#define SENDBUF_SIZE 1000
+#define SENDBUF_PACKET_SIZE 1024
 #define RECVBUF_SIZE 2048
 
 
@@ -34,7 +35,7 @@ int main (int argc, char * argv[] )
 	unsigned int remote_length;         //length of the sockaddr_in structure
 	int nbytes;                        //number of bytes we receive in our message
 	char buffer[MAXBUFSIZE];             //a buffer to store our received message
-    char sendbuffer[SENDBUF_SIZE], recvbuffer[RECVBUF_SIZE]; //Buffer for sending and receiving data
+    char sendbuffer[SENDBUF_PACKET_SIZE], recvbuffer[RECVBUF_SIZE]; //Buffer for sending and receiving data
 
 	if (argc != 2)
 	{
@@ -90,6 +91,7 @@ int main (int argc, char * argv[] )
 void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in sock_addr, socklen_t addrlen){
 
     int nbytes, file_size;
+    char ACK[256];
     FILE *fp;
 
     while(1){
@@ -140,18 +142,29 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
                     nbytes = strlen(sendbuf);
                     printf("File ready: %s %d\n", sendbuf, nbytes);
                     nbytes = sendto(sock,sendbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
+                    bzero(sendbuf,SENDBUF_PACKET_SIZE);
                     for(packet = 0;packet<=max_packets;packet++){
+                        sprintf(sendbuf,"%d ",packet);
                         fseek(fp,packet*SENDBUF_SIZE,SEEK_SET);
-                        fread(sendbuf,SENDBUF_SIZE,1,fp);
+                        fread((sendbuf+24),SENDBUF_SIZE,1,fp);
                         if(max_packets - packet){
-                            nbytes = SENDBUF_SIZE;
+                            nbytes = SENDBUF_PACKET_SIZE;
                         }
                         else{
-                            nbytes = (file_size - SENDBUF_SIZE*packet);
+                            nbytes = (file_size + 24 - SENDBUF_SIZE*packet);
                             printf("Sending packet: %d\n",packet);
                         }
                         nbytes = sendto(sock,sendbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
-                        bzero(sendbuf,SENDBUF_SIZE);                    }
+                        bzero(sendbuf,SENDBUF_PACKET_SIZE);
+                        bzero(recvbuf,RECVBUF_SIZE);
+                        nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+                        if(!strncmp(recvbuf,"ACK ",4)){
+                            sscanf("%s %d",ACK,&packet);
+                //            printf("ACK packet: %d\n", packet);
+                        }
+                        else
+                            packet--;
+                    }
                     // if(fread(sendbuf,file_size,1,fp)<=0)
                     // {
                     //   printf("Unable to copy file into buffer\n");
