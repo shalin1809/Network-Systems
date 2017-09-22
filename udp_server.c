@@ -18,7 +18,7 @@
 #define MAXBUFSIZE 100
 #define SENDBUF_SIZE 1000
 #define SENDBUF_PACKET_SIZE 1024
-#define RECVBUF_SIZE 2048
+#define RECVBUF_SIZE 1024
 
 
 void start_service();
@@ -189,7 +189,7 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
                         //Reset the receive buffer
                         bzero(recvbuf,RECVBUF_SIZE);
 
-                        //Wait to receive ACK from client
+                        //Wait to receive ACK from client, this will timeout
                         nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
                         //Check if ACK is received
                         if(!strncmp(recvbuf,"ACK ",4)){
@@ -210,7 +210,7 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
                     nbytes = 9;
                     //Close the opened file
                     fclose(fp);
-                    //Reset the receive timeout so it becomes blocking again
+                    //Reset the receive timeout so recvfrom becomes blocking again
                     timeout.tv_sec = 0;
                     timeout.tv_usec = 0;
                     if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,&timeout,sizeof(timeout)) < 0) {
