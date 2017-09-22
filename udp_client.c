@@ -72,7 +72,7 @@ int main (int argc, char * argv[])
 	nbytes = recvfrom(sock,buffer,MAXBUFSIZE,0,(struct sockaddr *) &remote, &remote_length);
     printf("Server ping %s\n", buffer);
 
-
+    //Start the service
     start_service(sock,sendbuffer,recvbuffer,remote,remote_length);
 
 	close(sock);
@@ -84,6 +84,10 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
 
     char command[256];
     int nbytes, command_length;
+    struct timeval timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 100000;   //Set timeout to 100ms
+
     printf("Commands accepted\nls\nget [file_name]\nput [file_name]\ndelete[file_name]");
     printf("\nexit\nWaiting for command:\n");
     while (1) {
@@ -96,40 +100,52 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
 repeat: command_length = strlen(command);
         //Send command to server
         nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &sock_addr, addrlen);
-        //Clear the receive buffer
+        //Clear the receive buffersps
         bzero(recvbuf,RECVBUF_SIZE);
 
+        //If the command is to get  a file
         if(!strncmp(command,"get ",4)){
-            char *filename = (command + 4); //Get file name
+            //Get file name
+            char *filename = (command + 4);
             FILE *fp;
+            //Send the command to the server
             nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+            //If file does not exist received
             if(!strncmp(recvbuf,"File does not exist",19)){
                 //Print what the server responded
                 printf("Server: %s\n\n", recvbuf);
                 continue;
             }
             else if(!strncmp(recvbuf,"Sending File ",13)){
-                int no_of_packet, file_size, current_packet=0;
+                int no_of_packet, file_size, current_packet=0,packet=1;
                 char temp[20];
                 sscanf(recvbuf,"%s %s %d %d",temp,temp,&no_of_packet,&file_size);
                 printf("Received: %s %d %d\n",temp,no_of_packet,file_size);
                 fp = fopen("received","w+");
                 bzero(recvbuf,RECVBUF_PACKET_SIZE);
-                for(current_packet;current_packet<no_of_packet;current_packet++){
+                for(current_packet=0;current_packet<=no_of_packet;current_packet++){
                     nbytes = recvfrom(sock,recvbuf,RECVBUF_PACKET_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
-                    sscanf(recvbuf,"%d ",&current_packet);
+                    sscanf(recvbuf,"%d",&current_packet);
                     fseek(fp,current_packet*RECVBUF_SIZE,SEEK_SET);
                     fwrite((recvbuf+24),(nbytes-24),1,fp);
                     if(!strncmp(recvbuf,"endoffile",9)){
                         goto eof;
                     }
+                    if((current_packet%100)==0){
+                        printf("Received packet: %d\n", current_packet);
+                    }
                     bzero(recvbuf,RECVBUF_PACKET_SIZE);
                     bzero(sendbuf,SENDBUF_SIZE);
-                    sprintf(sendbuf,"ACK %d",current_packet);
-                    nbytes = sendto(sock,sendbuf,SENDBUF_SIZE,0,(struct sockaddr *) &sock_addr, addrlen);
+                    if(no_of_packet - current_packet){
+                        if(packet != current_packet){
+                            sprintf(sendbuf,"ACK %d",current_packet);
+                            packet = current_packet;
+                            nbytes = sendto(sock,sendbuf,SENDBUF_SIZE,0,(struct sockaddr *) &sock_addr, addrlen);
+                        }
+                    }
                     //printf("Received packet: %d\n", current_packet);
                 }
-                nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+                //nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
                 printf("Outside for packet: %d\n\n", current_packet);
                 printf("Outside for: %s\n\n", recvbuf);
                 if(!strncmp(recvbuf,"endoffile",9)){
