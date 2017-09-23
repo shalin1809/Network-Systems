@@ -99,7 +99,8 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
         memset(command,0,sizeof(command));
 
         //Command input
-        gets(command);
+        fgets(command,256,stdin);
+        command[strcspn(command, "\n")] = 0;
 
 repeat: command_length = strlen(command);
         //Send command to server

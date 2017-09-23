@@ -296,6 +296,7 @@ eof:                    printf("Received endoffile\n");
                             //Send success if file size received is matches the initial file size sent by the server
                             strcpy(sendbuf,"success");
                             nbytes = strlen(sendbuf);
+                            nbytes = sendto(sock,sendbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
                             printf("Received file size is: %d\n", file_size);
                             //Decrypt the received file, it will generate a temp file
                             crypt_file(filename,cryptedfname);
@@ -303,7 +304,7 @@ eof:                    printf("Received endoffile\n");
                             remove(filename);
                             //Rename the decrypted file
                             rename(cryptedfname,filename);
-                            //nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &sock_addr, addrlen);
+                            goto skipsendto;
                         }
                         else {
                             //If file size is not same, delete the file and repeat the process
@@ -356,7 +357,7 @@ eof:                    printf("Received endoffile\n");
         }
 
         nbytes = sendto(sock,sendbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
-        bzero(sendbuf,SENDBUF_SIZE);
+skipsendto:        bzero(sendbuf,SENDBUF_SIZE);
     }
 
     exit(0);
