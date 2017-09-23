@@ -86,6 +86,7 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
     char command[256];
     int nbytes, command_length, file_size;
     char ACK[256];
+    char fname[256];
     struct timeval timeout;
     timeout.tv_sec = 0;
     timeout.tv_usec = 100000;   //Set timeout to 100ms
@@ -108,7 +109,8 @@ repeat: command_length = strlen(command);
         //If the command is to get  a file
         if(!strncmp(command,"get ",4)){
             //Get file name
-            char *filename = (command + 4);
+            strcpy(fname,command+4);
+            char *filename = fname;
             FILE *fp;
             //Receive response from the server
             nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
@@ -126,7 +128,7 @@ repeat: command_length = strlen(command);
                 sscanf(recvbuf,"%s %s %d %d",temp,temp,&no_of_packet,&file_size);
                 printf("Received: %s %d %d\n",temp,no_of_packet,file_size);
                 //Create a new file and open it with write access
-                fp = fopen("received","w+");
+                fp = fopen(filename,"w+");
                 //Clear the receive buffer
                 bzero(recvbuf,RECVBUF_PACKET_SIZE);
                 //Start loop to receive packets
@@ -165,9 +167,9 @@ repeat: command_length = strlen(command);
 eof:                printf("Received endoffile\n");
                     //File transfer complete, close the file
                     fclose(fp);
-                    printf("The file sizes are %d  %d\n",file_size,get_file_size("received"));
+                    printf("The file sizes are %d  %d\n",file_size,get_file_size(filename));
                     //Check the received file size
-                    if((file_size) == get_file_size(fp)){
+                    if((file_size) == get_file_size(filename)){
                         //Send success if file size received is matches the initial file size sent by the server
                         strcpy(command,"success");
                         printf("Received file size is: %d\n", file_size);

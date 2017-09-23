@@ -94,6 +94,7 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
     int nbytes, file_size, command_length;
     char ACK[256];
     char command[256];
+    char fname[256];
     FILE *fp;
     struct timeval timeout;
     timeout.tv_sec = 0;
@@ -224,10 +225,11 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
 
             /**** put file ****/
             else if (!strncmp(recvbuf,"put ",4)){
-                printf("Receiving file\n");
-                // Prepare to receive file
                 //Extract the file name
-                char * filename = get_file_name(recvbuf);
+                strcpy(fname,recvbuf+4);
+                char * filename = fname;
+                // Prepare to receive file
+                printf("Receiving file: %s\n", filename);
                 //Receive file details from the client
                 bzero(recvbuf,RECVBUF_PACKET_SIZE);
                 nbytes = recvfrom(sock,recvbuf,RECVBUF_PACKET_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
@@ -239,7 +241,7 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
                     sscanf(recvbuf,"%s %s %d %d",temp,temp,&no_of_packet,&file_size);
                     printf("Received: %s %d %d\n",temp,no_of_packet,file_size);
                     //Create a new file and open it with write access
-                    fp = fopen("received","w+");
+                    fp = fopen(filename,"w+");
                     //Clear the receive buffer
                     strcat(sendbuf,"Server ready");
                     nbytes = strlen(sendbuf);
@@ -279,9 +281,9 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
 eof:                    printf("Received endoffile\n");
                         //File transfer complete, close the file
                         fclose(fp);
-                        printf("The file sizes are %d  %d\n",file_size,get_file_size("received"));
+                        printf("The file sizes are %d  %d\n",file_size,get_file_size(filename));
                         //Check the received file size
-                        if((file_size) == get_file_size((char*)fp)){
+                        if((file_size) == get_file_size((char*)filename)){
                             //Send success if file size received is matches the initial file size sent by the server
                             strcpy(sendbuf,"success");
                             nbytes = strlen(sendbuf);
