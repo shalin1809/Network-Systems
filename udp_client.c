@@ -22,6 +22,7 @@
 
 void start_service();
 int get_file_size();
+int crypt_file(char * filename, char * crypted);
 
 /* You will have to modify the program below */
 int main (int argc, char * argv[])
@@ -86,7 +87,7 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
     char command[256];
     int nbytes, command_length, file_size;
     char ACK[256];
-    char fname[256];
+    char fname[256],cryptedfname[256];
     struct timeval timeout;
     timeout.tv_sec = 0;
     timeout.tv_usec = 100000;   //Set timeout to 100ms
@@ -174,6 +175,12 @@ eof:                printf("Received endoffile\n");
                         strcpy(command,"success");
                         printf("Received file size is: %d\n", file_size);
                         nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &sock_addr, addrlen);
+                        //Decrypt the received file, it will generate a temp file
+                        crypt_file(filename,cryptedfname);
+                        //Remove the received encrypted file
+                        remove(filename);
+                        //Rename the decrypted file
+                        rename(cryptedfname,filename);
                         bzero(recvbuf,RECVBUF_SIZE);
                         nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
                     }
@@ -186,12 +193,14 @@ eof:                printf("Received endoffile\n");
                 }
             }
         }
-        //If the command is to get  a file
+        //If the command is to put a file
         else if(!strncmp(command,"put ",4)){
             char *filename = (command + 4);
+            crypt_file(filename,cryptedfname);
+
             FILE *fp;
             //Open file
-            fp = fopen(filename,"r");
+            fp = fopen(cryptedfname,"r");
             if(fp==NULL){
                 printf("File does not exist\n");
                 bzero(sendbuf,SENDBUF_PACKET_SIZE);
@@ -279,6 +288,8 @@ eof:                printf("Received endoffile\n");
                 if(!strncmp(recvbuf,"File size is not same",21)){
                     goto repeat;
                 }
+                //On successfully sending, delete the temp file
+                remove(cryptedfname);
             }
         }
         else{
@@ -306,4 +317,40 @@ int get_file_size(char *filename){
     stat(filename, &buf);
     int size = buf.st_size;
     return size;
+}
+
+
+
+/* Encrypt/Decrypt file using XOR */
+int crypt_file(char * filename, char * crypted){
+    FILE *fp, *fd;
+    int file_size = get_file_size(filename);
+    char* crypted_temp = "crypted_temp";
+    //Open source file for reading
+    fp = fopen(filename,"r");
+    if(fp == NULL ){
+        printf("File does not exist\n");
+        return 0;
+    }
+    //Create a temporary file for storing the XORed data
+    fd = fopen(crypted_temp,"w+");
+    if(fp == NULL ){
+        printf("File does not exist\n");
+        return 0;
+    }
+
+    //Current data byte
+    char data_byte;
+    char * key = "SHALIN";
+    int keysize = strlen(key);
+    int count = 0;
+    //Loop through each byte of file for the file size
+    for(count;count<file_size;count++){
+        data_byte = fgetc(fp);
+        fputc((data_byte ^ key[count%keysize]), fd);
+    }
+    fclose(fp);
+    fclose(fd);
+    //Set the name of the crypted file
+    strcpy(crypted,crypted_temp);
 }
