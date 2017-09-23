@@ -18,7 +18,8 @@
 #define MAXBUFSIZE 100
 #define SENDBUF_SIZE 1000
 #define SENDBUF_PACKET_SIZE 1024
-#define RECVBUF_SIZE 1024
+#define RECVBUF_SIZE 1000
+#define RECVBUF_PACKET_SIZE 1024
 
 
 void start_service();
@@ -90,8 +91,9 @@ int main (int argc, char * argv[] )
 
 void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in sock_addr, socklen_t addrlen){
 
-    int nbytes, file_size;
+    int nbytes, file_size, command_length;
     char ACK[256];
+    char command[256];
     FILE *fp;
     struct timeval timeout;
     timeout.tv_sec = 0;
@@ -224,6 +226,85 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
             else if (!strncmp(recvbuf,"put ",4)){
                 printf("Receiving file\n");
                 // Prepare to receive file
+                //Extract the file name
+                char * filename = get_file_name(recvbuf);
+                //Receive file details from the client
+                bzero(recvbuf,RECVBUF_PACKET_SIZE);
+                nbytes = recvfrom(sock,recvbuf,RECVBUF_PACKET_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+                //Received sending file command
+                if(!strncmp(recvbuf,"Sending File ",13)){
+                    int no_of_packet, file_size, current_packet=0,packet=1;
+                    char temp[20];
+                    //Extract the number of packets and file size
+                    sscanf(recvbuf,"%s %s %d %d",temp,temp,&no_of_packet,&file_size);
+                    printf("Received: %s %d %d\n",temp,no_of_packet,file_size);
+                    //Create a new file and open it with write access
+                    fp = fopen("received","w+");
+                    //Clear the receive buffer
+                    strcat(sendbuf,"Server ready");
+                    nbytes = strlen(sendbuf);
+                    nbytes = sendto(sock,sendbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
+                    bzero(recvbuf,RECVBUF_PACKET_SIZE);
+                    for(current_packet=0;current_packet<=no_of_packet;current_packet++){
+                        nbytes = recvfrom(sock,recvbuf,RECVBUF_PACKET_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
+                        //On receivin, get the sequence number at the start of the packet
+                        sscanf(recvbuf,"%d",&current_packet);
+                        //Move the file pointer accordingly
+                        fseek(fp,current_packet*RECVBUF_SIZE,SEEK_SET);
+                        //Check if endoffile received, exit loop
+                        if(!strncmp(recvbuf,"endoffile",9)){
+                            goto eof;
+                        }
+                        //Write the received data onto the file
+                        fwrite((recvbuf+24),(nbytes-24),1,fp);
+                        //Print on terminal for every 100 packets to track progress
+                        if((current_packet%100)==0){
+                            printf("Received packet: %d\n", current_packet);
+                        }
+                        //Clear the send and receive buffers
+                        bzero(recvbuf,RECVBUF_PACKET_SIZE);
+                        bzero(sendbuf,SENDBUF_PACKET_SIZE);
+                        //if(no_of_packet - current_packet){
+                            //If the same packet is received again, do not ACK again
+                            if(packet != current_packet){
+                                sprintf(sendbuf,"ACK %d",current_packet);
+                                packet = current_packet;
+                                nbytes = sendto(sock,sendbuf,SENDBUF_PACKET_SIZE,0,(struct sockaddr *) &sock_addr, addrlen);
+                            }
+                        //}
+                    }
+                    printf("Outside for packet: %d\n\n", current_packet);
+                    printf("Outside for: %s\n\n", recvbuf);
+                    if(!strncmp(recvbuf,"endoffile",9)){
+eof:                    printf("Received endoffile\n");
+                        //File transfer complete, close the file
+                        fclose(fp);
+                        printf("The file sizes are %d  %d\n",file_size,get_file_size("received"));
+                        //Check the received file size
+                        if((file_size) == get_file_size((char*)fp)){
+                            //Send success if file size received is matches the initial file size sent by the server
+                            strcpy(sendbuf,"success");
+                            nbytes = strlen(sendbuf);
+                            printf("Received file size is: %d\n", file_size);
+                            //nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &sock_addr, addrlen);
+                        }
+                        else {
+                            //If file size is not same, delete the file and repeat the process
+                            printf("File size is not same\n");
+                            strcpy(sendbuf,"File size is not same");
+                            nbytes = strlen(sendbuf);
+                            //delete file and send file size not same error
+                            system("rm -f received");
+                            //nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &sock_addr, addrlen);
+                        }
+                    }
+
+                }
+                else{
+                    printf("Error\n");
+                    strcat(sendbuf,"put failed");
+                    nbytes = strlen(sendbuf);
+                }
 
             }
 
