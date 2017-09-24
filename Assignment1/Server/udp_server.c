@@ -13,7 +13,7 @@
 #include <memory.h>
 #include <string.h>
 #include <sys/stat.h>
-/* You will have to modify the program below */
+
 
 #define MAXBUFSIZE 100
 #define SENDBUF_SIZE 1000
@@ -25,7 +25,7 @@
 void start_service();
 int get_file_size(char *fd);
 char * get_file_name(char * recvbuf);
-void delete_file(char * filename);
+int delete_file(char * filename);
 char* crypt_file(char * filename,char* crypted);
 
 
@@ -101,7 +101,6 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
     timeout.tv_sec = 0;
     timeout.tv_usec = 100000;   //Set timeout to 100ms
 
-
     while(1){
         //Clear the receive buffer
         bzero(recvbuf,RECVBUF_SIZE);
@@ -134,7 +133,6 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
                 //Close the file
                 fclose(fp);
                 remove("filenames.txt");
-
                 //The sendto function at the end of while(1) will send the file.
             }
 
@@ -276,14 +274,12 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
                         //Clear the send and receive buffers
                         bzero(recvbuf,RECVBUF_PACKET_SIZE);
                         bzero(sendbuf,SENDBUF_PACKET_SIZE);
-                        //if(no_of_packet - current_packet){
-                            //If the same packet is received again, do not ACK again
-                            if(packet != current_packet){
-                                sprintf(sendbuf,"ACK %d",current_packet);
-                                packet = current_packet;
-                                nbytes = sendto(sock,sendbuf,SENDBUF_PACKET_SIZE,0,(struct sockaddr *) &sock_addr, addrlen);
-                            }
-                        //}
+                        //If the same packet is received again, do not ACK again
+                        if(packet != current_packet){
+                            sprintf(sendbuf,"ACK %d",current_packet);
+                            packet = current_packet;
+                            nbytes = sendto(sock,sendbuf,SENDBUF_PACKET_SIZE,0,(struct sockaddr *) &sock_addr, addrlen);
+                        }
                     }
                     printf("Outside for packet: %d\n\n", current_packet);
                     printf("Outside for: %s\n\n", recvbuf);
@@ -317,14 +313,12 @@ eof:                    printf("Received endoffile\n");
                             //nbytes = sendto(sock,command,command_length,0,(struct sockaddr *) &sock_addr, addrlen);
                         }
                     }
-
                 }
                 else{
-                    printf("Error\n");
+                    printf("Put failed\n");
                     strcat(sendbuf,"put failed");
                     nbytes = strlen(sendbuf);
                 }
-
             }
 
             /**** delete file ****/
@@ -339,8 +333,13 @@ eof:                    printf("Received endoffile\n");
                     //If file if available
                     printf("Deleting file %s\n",filename);
                     //Call delete file function which performs rm -f system call
-                    delete_file(filename);
-                    nbytes = 0;
+                    if(delete_file(filename)==1){
+                        strcpy(sendbuf,"success");
+                    }
+                    else {
+                        strcpy(sendbuf,"File does not exits");
+                    }
+                    nbytes = strlen(sendbuf);
                     //Send NULL using the sendto at the end of while(1)
                 }
             }
@@ -394,13 +393,21 @@ char * get_file_name(char * recvbuf){
 
 
 /* Performs a system call to delete the filename received */
-void delete_file(char * filename){
-
+int delete_file(char * filename){
+    FILE *fp;
+    //Check if file exists
+    fp = fopen(filename,"r");
+    if(fp == NULL ){
+        printf("File does not exist\n");
+        return -1;
+    }
+    fclose(fp);
     char command[256];
     bzero(command,sizeof(command));
     strcat(command, "rm -f ");
     strcat(command, filename);
     system(command);
+    return 1;
 }
 
 

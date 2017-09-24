@@ -91,10 +91,12 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
     struct timeval timeout;
     timeout.tv_sec = 0;
     timeout.tv_usec = 100000;   //Set timeout to 100ms
+    printf("--------------------------------------\n");
+    printf("Commands accepted\nls\nget [file_name]\nput [file_name]\ndelete[file_name]\nexit\n");
 
-    printf("Commands accepted\nls\nget [file_name]\nput [file_name]\ndelete[file_name]");
-    printf("\nexit\nWaiting for command:\n");
     while (1) {
+        printf("--------------------------------------\n");
+        printf("Waiting for command:\n");
         //Clear the command buffer
         memset(command,0,sizeof(command));
 
@@ -153,14 +155,12 @@ repeat: command_length = strlen(command);
                     //Clear the send and receive buffers
                     bzero(recvbuf,RECVBUF_PACKET_SIZE);
                     bzero(sendbuf,SENDBUF_SIZE);
-                    //if(no_of_packet - current_packet){
-                        //If the same packet is received again, do not ACK again
-                        if(packet != current_packet){
-                            sprintf(sendbuf,"ACK %d",current_packet);
-                            packet = current_packet;
-                            nbytes = sendto(sock,sendbuf,SENDBUF_SIZE,0,(struct sockaddr *) &sock_addr, addrlen);
-                        }
-                    //}
+                    //If the same packet is received again, do not ACK again
+                    if(packet != current_packet){
+                        sprintf(sendbuf,"ACK %d",current_packet);
+                        packet = current_packet;
+                        nbytes = sendto(sock,sendbuf,SENDBUF_SIZE,0,(struct sockaddr *) &sock_addr, addrlen);
+                    }
                 }
                 //nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
                 printf("Outside for packet: %d\n\n", current_packet);
@@ -295,7 +295,6 @@ eof:                printf("Received endoffile\n");
                 //On successfully sending, delete the temp file
                 remove(cryptedfname);
             }
-
         }
         else{
             //Receive reply from server
@@ -307,10 +306,9 @@ eof:                printf("Received endoffile\n");
             }
         }
         //Print what the server responded
-        printf("Server: %s\n\n", recvbuf);
+        printf("Server: %s\n", recvbuf);
         bzero(recvbuf,RECVBUF_SIZE);
     }
-
 }
 
 
