@@ -207,6 +207,9 @@ eof:                printf("Received endoffile\n");
                 bzero(sendbuf,SENDBUF_PACKET_SIZE);
                 strcat(sendbuf,"File does not exist");
                 nbytes = strlen(sendbuf);
+                nbytes = sendto(sock,sendbuf,nbytes,0,(struct sockaddr *) &sock_addr, addrlen);
+                bzero(recvbuf,RECVBUF_SIZE);
+                nbytes = recvfrom(sock,recvbuf,RECVBUF_SIZE,0,(struct sockaddr *) &sock_addr, &addrlen);
             }
             else{//File exists
 
@@ -292,6 +295,7 @@ eof:                printf("Received endoffile\n");
                 //On successfully sending, delete the temp file
                 remove(cryptedfname);
             }
+
         }
         else{
             //Receive reply from server

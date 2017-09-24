@@ -133,6 +133,7 @@ void start_service(int sock, char *sendbuf, char *recvbuf, struct sockaddr_in so
                 nbytes = file_size;
                 //Close the file
                 fclose(fp);
+                remove("filenames.txt");
 
                 //The sendto function at the end of while(1) will send the file.
             }
