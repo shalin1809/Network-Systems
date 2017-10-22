@@ -23,6 +23,7 @@ void startServer(char *);
 void respond(int);
 
 char * getvalue(char item[]);
+int get_file_size(char *filename);
 
 
 int main(int argc, char * argv[]){
@@ -63,9 +64,10 @@ int main(int argc, char * argv[]){
             error ("accept() error");
         else
         {
-            if ( fork()==0 )
+            //On acceoting new requestin, create a child process to send the response
+            if ( fork()==0 )    //The parent process will wait for new connections
             {
-                respond(slot);
+                respond(slot);  //The child process responds and is killed after that
                 exit(0);
             }
         }
@@ -120,11 +122,32 @@ void startServer(char *port)
 //client connection
 void respond(int n)
 {
+    struct HTTP_packet_t{
+        char* method;
+        char* URI;
+        char* version;
+        char* content_type;
+        char* content_length;
+    }HTTP_packet;
+
+    char* method_get = "GET";
+    char* method_post = "POST";
+    char* version_1_0 = "HTTP/1.0";
+    char* version_1_1 = "HTTP/1.1";
+    char* blankline = "\n\r";
+    char *value;
+
 	char mesg[99999], *reqline[3], data_to_send[BYTES], path[99999];
 	int rcvd, fd, bytes_read;
+    char* sendbuf = data_to_send;
+    int offset,size;
+    char temp[512];
+    char * req_ptr;
 
+    //Resset the message buffer
 	memset( (void*)mesg, (int)'\0', 99999 );
 
+    //receive the tcp data
 	rcvd=recv(clients[n], mesg, 99999, 0);
 
 	if (rcvd<0)    // receive error
@@ -133,15 +156,46 @@ void respond(int n)
 		fprintf(stderr,"Client disconnected upexpectedly.\n");
 	else    // message received
 	{
+        //print the received message
 		printf("%s", mesg);
+        //Parse the received header
 		reqline[0] = strtok (mesg, " \t\n");
+        //Check if it is a GET request
 		if ( strncmp(reqline[0], "GET\0", 4)==0 )
 		{
 			reqline[1] = strtok (NULL, " \t");
 			reqline[2] = strtok (NULL, " \t\n");
+            printf("Reqlines %s %s %s\n",reqline[0],reqline[1],reqline[2]);
+            //Check the HTTP version
 			if ( strncmp( reqline[2], "HTTP/1.0", 8)!=0 && strncmp( reqline[2], "HTTP/1.1", 8)!=0 )
 			{
-				write(clients[n], "HTTP/1.0 400 Bad Request\n", 25);
+                //Reply bad request if version is not 1.0 or 1.1
+                if((req_ptr = strchr(reqline[2],'\r'))!=NULL)
+                    strcpy(req_ptr,"\0");
+                bzero(data_to_send,sizeof(data_to_send));
+                HTTP_packet.version = version_1_0;
+                //Set 1st line to say bad request
+                offset = sprintf(sendbuf,"%s 400 Bad Request\n",HTTP_packet.version);
+                sendbuf+=offset;
+                value = getvalue(".html");
+                //Append content type
+                offset = sprintf(sendbuf,"Content Type: %s\n",value);
+                sendbuf+=offset;
+                bzero(temp,sizeof(&temp));
+                //Create the html file content
+                strcpy(temp,"<html><body>400 Bad Request Reason: Invalid HTTP version: ");
+                strcat(temp,reqline[2]);
+                strcat(temp,"</body></html>");
+                printf("Temp buffer: %s\n",temp);
+                //Append content length
+                offset = sprintf(sendbuf,"Content Length: %d\n\n",(int)strlen(temp));
+                sendbuf+=offset;
+                //Append the html content
+                strcpy(sendbuf,temp);
+                //Print the data_to_send for debugging
+                printf("data_to_send:\n%s\n",data_to_send);
+                //Send the data to the client
+                send(clients[n], data_to_send, strlen(data_to_send),0);
 			}
 			else
 			{
@@ -161,6 +215,69 @@ void respond(int n)
 				else    write(clients[n], "HTTP/1.0 404 Not Found\n", 23); //FILE NOT FOUND
 			}
 		}
+
+        //Not implemented methods
+    	else if ((strncmp(reqline[0],"POST\0",5)==0)|| \
+                (strncmp(reqline[0],"HEAD\0",5)==0)|| \
+                (strncmp(reqline[0],"DELETE\0",7)==0)|| \
+                (strncmp(reqline[0],"OPTIONS\0",8)==0)){
+            //Reply not implemented for known methods not implemented
+            bzero(data_to_send,sizeof(data_to_send));
+            HTTP_packet.version = version_1_0;
+            //Set 1st line to say bad request
+            offset = sprintf(sendbuf,"%s 501 Not Implemented\n",HTTP_packet.version);
+            sendbuf+=offset;
+            value = getvalue(".html");
+            //Append content type
+            offset = sprintf(sendbuf,"Content Type: %s\n",value);
+            sendbuf+=offset;
+            bzero(temp,sizeof(&temp));
+            //Create the html file content
+            strcpy(temp,"<html><body>501 Not Implemented Method: ");
+            strcat(temp,reqline[0]);
+            strcat(temp,"</body></html>");
+            printf("Temp buffer: %s\n",temp);
+            //Append content length
+            offset = sprintf(sendbuf,"Content Length: %d\n\n",(int)strlen(temp));
+            sendbuf+=offset;
+            //Append the html content
+            strcpy(sendbuf,temp);
+            //Print the data_to_send for debugging
+            printf("data_to_send:\n%s\n",data_to_send);
+            //Send the data to the client
+            send(clients[n], data_to_send, strlen(data_to_send),0);
+        }
+
+        //Invalid Method
+        else{
+
+            if((req_ptr = strchr(reqline[0],'\r'))!=NULL)
+                strcpy(req_ptr,"\0");
+            bzero(data_to_send,sizeof(data_to_send));
+            HTTP_packet.version = version_1_0;
+            //Set 1st line to say bad request
+            offset = sprintf(sendbuf,"%s 400 Bad Request\n",HTTP_packet.version);
+            sendbuf+=offset;
+            value = getvalue(".html");
+            //Append content type
+            offset = sprintf(sendbuf,"Content Type: %s\n",value);
+            sendbuf+=offset;
+            bzero(temp,sizeof(&temp));
+            //Create the html file content
+            strcpy(temp,"<html><body>400 Bad Request Reason: Invalid Method: ");
+            strcat(temp,reqline[0]);
+            strcat(temp,"</body></html>");
+            printf("Temp buffer: %s\n",temp);
+            //Append content length
+            offset = sprintf(sendbuf,"Content Length: %d\n\n",(int)strlen(temp));
+            sendbuf+=offset;
+            //Append the html content
+            strcpy(sendbuf,temp);
+            //Print the data_to_send for debugging
+            printf("data_to_send:\n%s\n",data_to_send);
+            //Send the data to the client
+            send(clients[n], data_to_send, strlen(data_to_send),0);
+        }
 	}
 
 	//Closing SOCKET
@@ -186,8 +303,8 @@ char * getvalue(char item[]){
     while(fgets(line,sizeof(line),fp)!=NULL){
         if(line[0]=='#')
             continue;
-        if((needle = strstr(line,item))!=NULL){
-            needle = strchr(needle,' ');
+        if((strncmp(line,item,strlen(item)))==0){
+            needle = strchr(line,' ');
             needle++;
             strcpy(strchr(needle,'\n'),"\0");
             if(item == "DocumentRoot"){
@@ -202,4 +319,15 @@ char * getvalue(char item[]){
     fclose(fp);
     printf("Item %s not found\n",item);
     return NULL;
+}
+
+
+/* Get the file size in bytes */
+int get_file_size(char *filename){
+    //Make a structure for the file properties
+    struct stat buf;
+    stat(filename, &buf);
+    //Get the file size from the file properties
+    int size = buf.st_size;
+    return size;
 }
