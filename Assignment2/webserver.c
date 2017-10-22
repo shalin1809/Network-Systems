@@ -199,20 +199,53 @@ void respond(int n)
 			}
 			else
 			{
-				if ( strncmp(reqline[1], "/\0", 2)==0 )
-					reqline[1] = "/index.html";        //Because if no file is specified, index.html will be opened by default (like it happens in APACHE...
+                //Requested file does not have proper path specified
+                if(strncmp(reqline[1],"/",1)!=0){
+                    if((req_ptr = strchr(reqline[1],'\r'))!=NULL)
+                        strcpy(req_ptr,"\0");
+                    bzero(data_to_send,sizeof(data_to_send));
+                    HTTP_packet.version = version_1_0;
+                    //Set 1st line to say bad request
+                    offset = sprintf(sendbuf,"%s 400 Bad Request\n",HTTP_packet.version);
+                    sendbuf+=offset;
+                    value = getvalue(".html");
+                    //Append content type
+                    offset = sprintf(sendbuf,"Content Type: %s\n",value);
+                    sendbuf+=offset;
+                    bzero(temp,sizeof(&temp));
+                    //Create the html file content
+                    strcpy(temp,"<html><body>400 Bad Request Reason: Invalid URL: ");
+                    strcat(temp,reqline[1]);
+                    strcat(temp,"</body></html>");
+                    printf("Temp buffer: %s\n",temp);
+                    //Append content length
+                    offset = sprintf(sendbuf,"Content Length: %d\n\n",(int)strlen(temp));
+                    sendbuf+=offset;
+                    //Append the html content
+                    strcpy(sendbuf,temp);
+                    //Print the data_to_send for debugging
+                    printf("data_to_send:\n%s\n",data_to_send);
+                    //Send the data to the client
+                    send(clients[n], data_to_send, strlen(data_to_send),0);
+                }
 
-				strcpy(path, ROOT);
-				strcpy(&path[strlen(ROOT)], reqline[1]);
-				printf("file: %s\n", path);
+                //Requested URL starts with a /, thus we consider it to be a valid URL
+                else{
+                    if ( strncmp(reqline[1], "/\0", 2)==0 )
+                        reqline[1] = "/index.html";        //Because if no file is specified, index.html will be opened by default (like it happens in APACHE...
 
-				if ( (fd=open(path, O_RDONLY))!=-1 )    //FILE FOUND
-				{
-					send(clients[n], "HTTP/1.0 200 OK\n\n", 17, 0);
-					while ( (bytes_read=read(fd, data_to_send, BYTES))>0 )
-						write (clients[n], data_to_send, bytes_read);
-				}
-				else    write(clients[n], "HTTP/1.0 404 Not Found\n", 23); //FILE NOT FOUND
+                    strcpy(path, ROOT);
+                    strcpy(&path[strlen(ROOT)], reqline[1]);
+                    printf("file: %s\n", path);
+
+                    if ( (fd=open(path, O_RDONLY))!=-1 )    //FILE FOUND
+                    {
+                        send(clients[n], "HTTP/1.0 200 OK\n\n", 17, 0);
+                        while ( (bytes_read=read(fd, data_to_send, BYTES))>0 )
+                        write (clients[n], data_to_send, bytes_read);
+                    }
+                    else    write(clients[n], "HTTP/1.0 404 Not Found\n", 23); //FILE NOT FOUND
+                }
 			}
 		}
 
