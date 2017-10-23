@@ -1,4 +1,3 @@
-
 #include<string.h>
 #include<stdlib.h>
 #include<unistd.h>
@@ -137,18 +136,20 @@ void respond(int n)
     char* blankline = "\n\r";
     char *value;
 
-	char mesg[99999], *reqline[3], data_to_send[BYTES], path[99999];
+	char mesg[99999], *reqline[3], data_to_send[BYTES], path[99999],copy[99999];
 	int rcvd, fd, bytes_read;
     char* sendbuf = data_to_send;
     int offset,size;
     char temp[512];
     char * req_ptr;
+    char * POST_DATA;
 
-    //Resset the message buffer
+    //Reset the message buffer
 	memset( (void*)mesg, (int)'\0', 99999 );
 
     //receive the tcp data
 	rcvd=recv(clients[n], mesg, 99999, 0);
+    strcpy(copy,mesg);
 
 	if (rcvd<0)    // receive error
 		fprintf(stderr,("recv() error\n"));
@@ -157,15 +158,15 @@ void respond(int n)
 	else    // message received
 	{
         //print the received message
-		printf("%s", mesg);
+		printf("received message: %s\n", mesg);
         //Parse the received header
-		reqline[0] = strtok (mesg, " \t\n");
+		reqline[0] = strtok (mesg, " \t");
         //Check if it is a GET request
 		if ( strncmp(reqline[0], "GET\0", 4)==0 )
 		{
 			reqline[1] = strtok (NULL, " \t");
 			reqline[2] = strtok (NULL, " \t\n");
-            printf("Reqlines %s %s %s\n",reqline[0],reqline[1],reqline[2]);
+
             //Check the HTTP version
 			if ( strncmp( reqline[2], "HTTP/1.0", 8)!=0 && strncmp( reqline[2], "HTTP/1.1", 8)!=0 )
 			{
@@ -179,7 +180,7 @@ void respond(int n)
                 sendbuf+=offset;
                 value = getvalue(".html");
                 //Append content type
-                offset = sprintf(sendbuf,"Content Type: %s\n",value);
+                offset = sprintf(sendbuf,"Content-Type: %s\n",value);
                 sendbuf+=offset;
                 bzero(temp,sizeof(&temp));
                 //Create the html file content
@@ -188,7 +189,7 @@ void respond(int n)
                 strcat(temp,"</body></html>");
                 printf("Temp buffer: %s\n",temp);
                 //Append content length
-                offset = sprintf(sendbuf,"Content Length: %d\n\n",(int)strlen(temp));
+                offset = sprintf(sendbuf,"Content-Length: %d\n\n",(int)strlen(temp));
                 sendbuf+=offset;
                 //Append the html content
                 strcpy(sendbuf,temp);
@@ -210,7 +211,7 @@ void respond(int n)
                     sendbuf+=offset;
                     value = getvalue(".html");
                     //Append content type
-                    offset = sprintf(sendbuf,"Content Type: %s\n",value);
+                    offset = sprintf(sendbuf,"Content-Type: %s\n",value);
                     sendbuf+=offset;
                     bzero(temp,sizeof(&temp));
                     //Create the html file content
@@ -219,7 +220,7 @@ void respond(int n)
                     strcat(temp,"</body></html>");
                     printf("Temp buffer: %s\n",temp);
                     //Append content length
-                    offset = sprintf(sendbuf,"Content Length: %d\n\n",(int)strlen(temp));
+                    offset = sprintf(sendbuf,"Content-Length: %d\n\n",(int)strlen(temp));
                     sendbuf+=offset;
                     //Append the html content
                     strcpy(sendbuf,temp);
@@ -251,9 +252,9 @@ void respond(int n)
                         sendbuf+=offset;
                         value = getvalue(strrchr(path,'.'));
                         //Append content type
-                        offset = sprintf(sendbuf,"Content Type: %s\n",value);
+                        offset = sprintf(sendbuf,"Content-Type: %s\n",value);
                         sendbuf+=offset;
-                        offset = sprintf(sendbuf,"Content Length: %d\n\n",get_file_size(path));
+                        offset = sprintf(sendbuf,"Content-Length: %d\n\n",get_file_size(path));
                         printf("\ndata_to_send:\n%s\n", data_to_send);
                         send(clients[n], data_to_send, strlen(data_to_send), 0);
                         while ( (bytes_read=read(fd, data_to_send, BYTES))>0 )
@@ -270,7 +271,7 @@ void respond(int n)
                         sendbuf+=offset;
                         value = getvalue(".html");
                         //Append content type
-                        offset = sprintf(sendbuf,"Content Type: %s\n",value);
+                        offset = sprintf(sendbuf,"Content-Type: %s\n",value);
                         sendbuf+=offset;
                         bzero(temp,sizeof(&temp));
                         //Create the html file content
@@ -279,7 +280,7 @@ void respond(int n)
                         strcat(temp,"</body></html>");
                         printf("Temp buffer: %s\n",temp);
                         //Append content length
-                        offset = sprintf(sendbuf,"Content Length: %d\n\n",(int)strlen(temp));
+                        offset = sprintf(sendbuf,"Content-Length: %d\n\n",(int)strlen(temp));
                         sendbuf+=offset;
                         //Append the html content
                         strcpy(sendbuf,temp);
@@ -292,9 +293,161 @@ void respond(int n)
 			}
 		}
 
+        else if(strncmp(reqline[0],"POST\0",5)==0){
+            reqline[1] = strtok (NULL, " \t");
+			reqline[2] = strtok (NULL, " \t");
+            if((req_ptr = strpbrk(reqline[2],"\r\n"))!=NULL)
+                strcpy(req_ptr,"\0");
+            //Check the HTTP version
+            if ( strncmp( reqline[2], "HTTP/1.0", 8)!=0 && strncmp( reqline[2], "HTTP/1.1", 8)!=0 )
+			{
+                //Reply bad request if version is not 1.0 or 1.1
+                if((req_ptr = strchr(reqline[2],'\r'))!=NULL)
+                    strcpy(req_ptr,"\0");
+                bzero(data_to_send,sizeof(data_to_send));
+                HTTP_packet.version = version_1_0;
+                //Set 1st line to say bad request
+                offset = sprintf(sendbuf,"%s 400 Bad Request\n",HTTP_packet.version);
+                sendbuf+=offset;
+                value = getvalue(".html");
+                //Append content type
+                offset = sprintf(sendbuf,"Content-Type: %s\n",value);
+                sendbuf+=offset;
+                bzero(temp,sizeof(&temp));
+                //Create the html file content
+                strcpy(temp,"<html><body>400 Bad Request Reason: Invalid HTTP version: ");
+                strcat(temp,reqline[2]);
+                strcat(temp,"</body></html>");
+                printf("Temp buffer: %s\n",temp);
+                //Append content length
+                offset = sprintf(sendbuf,"Content-Length: %d\n\n",(int)strlen(temp));
+                sendbuf+=offset;
+                //Append the html content
+                strcpy(sendbuf,temp);
+                //Print the data_to_send for debugging
+                printf("data_to_send:\n%s\n",data_to_send);
+                //Send the data to the client
+                send(clients[n], data_to_send, strlen(data_to_send),0);
+			}
+            else
+			{
+                *(reqline[2]+8) = '\0';
+                //Requested file does not have proper path specified
+                if(strncmp(reqline[1],"/",1)!=0){
+                    if((req_ptr = strchr(reqline[1],'\r'))!=NULL)
+                        strcpy(req_ptr,"\0");
+                    bzero(data_to_send,sizeof(data_to_send));
+                    HTTP_packet.version = version_1_0;
+                    //Set 1st line to say bad request
+                    offset = sprintf(sendbuf,"%s 400 Bad Request\n",HTTP_packet.version);
+                    sendbuf+=offset;
+                    value = getvalue(".html");
+                    //Append content type
+                    offset = sprintf(sendbuf,"Content-Type: %s\n",value);
+                    sendbuf+=offset;
+                    bzero(temp,sizeof(&temp));
+                    //Create the html file content
+                    strcpy(temp,"<html><body>400 Bad Request Reason: Invalid URL: ");
+                    strcat(temp,reqline[1]);
+                    strcat(temp,"</body></html>");
+                    printf("Temp buffer: %s\n",temp);
+                    //Append content length
+                    offset = sprintf(sendbuf,"Content-Length: %d\n\n",(int)strlen(temp));
+                    sendbuf+=offset;
+                    //Append the html content
+                    strcpy(sendbuf,temp);
+                    //Print the data_to_send for debugging
+                    printf("data_to_send:\n%s\n",data_to_send);
+                    //Send the data to the client
+                    send(clients[n], data_to_send, strlen(data_to_send),0);
+                }
+
+                //Requested URL starts with a /, thus we consider it to be a valid URL
+                else{
+                    //If no file is specified, DirectoryIndex in the conf file will be opened by default
+                    if ( strncmp(reqline[1], "/\0", 2)==0 ){
+                        value = getvalue("DirectoryIndex");
+                        reqline[1] = value;
+                    }
+
+                    strcpy(path, ROOT);
+                    strcpy(&path[strlen(ROOT)], reqline[1]);
+                    printf("file: %s\n", path);
+                    //File found
+                    if ( (fd=open(path, O_RDONLY))!=-1 )
+                    {
+                        if((req_ptr = strchr(reqline[2],'\r'))!=NULL)
+                            strcpy(req_ptr,"\0");
+                        bzero(data_to_send,sizeof(data_to_send));
+                        HTTP_packet.version = reqline[2];
+                        //Offset calculated by removing the first line and adding 3 NULL
+                        offset=strlen(reqline[0])+strlen(reqline[1])+strlen(reqline[2]);
+                        //Search for the blank line
+                        POST_DATA=copy;
+                        while((POST_DATA = strchr(++POST_DATA,'\n'))!=NULL){
+                            if((strchr(++POST_DATA,'\n') - POST_DATA)==1)
+                                break;
+                        };
+                        if(POST_DATA == NULL)
+                            POST_DATA = "No post data";
+                        //Move the pointer ahead of the blank line to get the post data
+                        else
+                            POST_DATA+=2;
+                        printf("postdata: %s\n",POST_DATA );
+                        //Set first line to reply OK
+                        offset = sprintf(sendbuf,"%s 200 OK\n",HTTP_packet.version);
+                        sendbuf+=offset;
+                        value = getvalue(strrchr(path,'.'));
+                        //Append content type
+                        offset = sprintf(sendbuf,"Content-Type: %s\n",value);
+                        sendbuf+=offset;
+                        //Add content length
+                        sprintf(temp,"<html><body><pre><h1>%s</h1></pre>",POST_DATA);
+                        offset = sprintf(sendbuf,"Content-Length: %d\n\n",(get_file_size(path)+(int)strlen(temp)));
+                        sendbuf+=offset;
+                        //Append the post data after a blank line
+                        //strcat(sendbuf,temp);
+                        printf("\ndata_to_send:\n%s\n", data_to_send);
+                        send(clients[n], data_to_send, strlen(data_to_send), 0);
+                        write (clients[n], temp, strlen(temp));
+                        while ( (bytes_read=read(fd, data_to_send, BYTES))>0 )
+                        write (clients[n], data_to_send, bytes_read);
+                    }
+                    //File not found
+                    else{
+                        if((req_ptr = strchr(reqline[1],'\r'))!=NULL)
+                            strcpy(req_ptr,"\0");
+                        bzero(data_to_send,sizeof(data_to_send));
+                        HTTP_packet.version = version_1_0;
+                        //Set 1st line to say bad request
+                        offset = sprintf(sendbuf,"%s 404 Not Found\n",HTTP_packet.version);
+                        sendbuf+=offset;
+                        value = getvalue(".html");
+                        //Append content type
+                        offset = sprintf(sendbuf,"Content-Type: %s\n",value);
+                        sendbuf+=offset;
+                        bzero(temp,sizeof(&temp));
+                        //Create the html file content
+                        strcpy(temp,"<html><body>404 Not Found Reason URL does not exist: ");
+                        strcat(temp,reqline[1]);
+                        strcat(temp,"</body></html>");
+                        printf("Temp buffer: %s\n",temp);
+                        //Append content length
+                        offset = sprintf(sendbuf,"Content-Length: %d\n\n",(int)strlen(temp));
+                        sendbuf+=offset;
+                        //Append the html content
+                        strcpy(sendbuf,temp);
+                        //Print the data_to_send for debugging
+                        printf("data_to_send:\n%s\n",data_to_send);
+                        //Send the data to the client
+                        send(clients[n], data_to_send, strlen(data_to_send),0);
+                    }   // write(clients[n], "HTTP/1.0 404 Not Found\n", 23); //FILE NOT FOUND
+                }
+			}
+        }
+
         //Not implemented methods
-    	else if ((strncmp(reqline[0],"POST\0",5)==0)|| \
-                (strncmp(reqline[0],"HEAD\0",5)==0)|| \
+    	else if ((strncmp(reqline[0],"HEAD\0",5)==0)|| \
                 (strncmp(reqline[0],"DELETE\0",7)==0)|| \
                 (strncmp(reqline[0],"OPTIONS\0",8)==0)){
             //Reply not implemented for known methods not implemented
@@ -305,7 +458,7 @@ void respond(int n)
             sendbuf+=offset;
             value = getvalue(".html");
             //Append content type
-            offset = sprintf(sendbuf,"Content Type: %s\n",value);
+            offset = sprintf(sendbuf,"Content-Type: %s\n",value);
             sendbuf+=offset;
             bzero(temp,sizeof(&temp));
             //Create the html file content
@@ -314,7 +467,7 @@ void respond(int n)
             strcat(temp,"</body></html>");
             printf("Temp buffer: %s\n",temp);
             //Append content length
-            offset = sprintf(sendbuf,"Content Length: %d\n\n",(int)strlen(temp));
+            offset = sprintf(sendbuf,"Content-Length: %d\n\n",(int)strlen(temp));
             sendbuf+=offset;
             //Append the html content
             strcpy(sendbuf,temp);
@@ -336,7 +489,7 @@ void respond(int n)
             sendbuf+=offset;
             value = getvalue(".html");
             //Append content type
-            offset = sprintf(sendbuf,"Content Type: %s\n",value);
+            offset = sprintf(sendbuf,"Content-Type: %s\n",value);
             sendbuf+=offset;
             bzero(temp,sizeof(&temp));
             //Create the html file content
@@ -345,7 +498,7 @@ void respond(int n)
             strcat(temp,"</body></html>");
             printf("Temp buffer: %s\n",temp);
             //Append content length
-            offset = sprintf(sendbuf,"Content Length: %d\n\n",(int)strlen(temp));
+            offset = sprintf(sendbuf,"Content-Length: %d\n\n",(int)strlen(temp));
             sendbuf+=offset;
             //Append the html content
             strcpy(sendbuf,temp);
