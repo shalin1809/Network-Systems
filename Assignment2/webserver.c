@@ -9,20 +9,20 @@
 #include<signal.h>
 #include<fcntl.h>
 #include<stdio.h>
+#include<stdint.h>
+#include<stdbool.h>
 
 #define CONNMAX 1000
 #define BYTES 1024
 
-char *ROOT;
-
-char line[256];
-int listenfd, clients[CONNMAX];
-void error(char *);
-void startServer(char *);
-void respond(int);
-
+void startServer(char *port);
+void respond(int slot);
 char * getvalue(char item[]);
 int get_file_size(char *filename);
+char *ROOT;
+char line[256];
+int listenfd, clients[CONNMAX];
+bool conf_missing=false;
 
 
 int main(int argc, char * argv[]){
@@ -33,20 +33,31 @@ int main(int argc, char * argv[]){
     char *value;
     int slot=0;
 
+    char PORT[6];
+    char root[1000];
+
     //Get port number from conf file
     value = getvalue("Listen");
-    printf("In main, value for port is:%s\n", value);
-    char PORT[6];
-    strcpy(PORT,value);
+    if(value==NULL){
+        conf_missing=true;
+        strcpy(PORT,"8000");
+        printf("Conf file missing, setting default port to 8000\n");
+    }
+    else
+        strcpy(PORT,value);
 
     //Get Document Root from the conf file
     value = getvalue("DocumentRoot");
-    printf("In main, path is:%s\n", value);
-    char root[1000];
-    strcpy(root,value);
+    if(value==NULL){
+        conf_missing=true;
+        strcpy(root,getenv("PWD"));
+        printf("Conf file missing, setting default root to %s\n",root);
+    }
+    else
+        strcpy(root,value);
     ROOT = root;
 
-    printf("Server started at port no. %s%s%s with root directory as %s%s%s\n","\033[92m",PORT,"\033[0m","\033[92m",ROOT,"\033[0m");
+    printf("Starting server at port no. %s with root directory as %s\n",PORT,ROOT);
     // Setting all elements to -1: signifies there is no client connected
     int i;
     for (i=0; i<CONNMAX; i++)
@@ -57,25 +68,26 @@ int main(int argc, char * argv[]){
     while (1)
     {
         addrlen = sizeof(clientaddr);
+        //Wait for new incoming connections
         clients[slot] = accept (listenfd, (struct sockaddr *) &clientaddr, &addrlen);
 
         if (clients[slot]<0)
-            error ("accept() error");
+            perror ("accept() error");
         else
         {
-            //On acceoting new requestin, create a child process to send the response
+            //On accepting new requests, create a child process to send the response
             if ( fork()==0 )    //The parent process will wait for new connections
             {
                 respond(slot);  //The child process responds and is killed after that
                 exit(0);
             }
         }
-
-        while (clients[slot]!=-1) slot = (slot+1)%CONNMAX;
+        //Increment slot value and reuse slots
+        while (clients[slot]!=-1) {
+            slot = (slot+1)%CONNMAX;
+        }
     }
-
     return 0;
-
 }
 
 
@@ -121,6 +133,8 @@ void startServer(char *port)
 //client connection
 void respond(int n)
 {
+
+
     struct HTTP_packet_t{
         char* method;
         char* URI;
@@ -150,6 +164,14 @@ void respond(int n)
     //receive the tcp data
 	rcvd=recv(clients[n], mesg, 99999, 0);
     strcpy(copy,mesg);
+
+    value = getvalue("Listen");
+    //Send internal server error if config file is missing
+    if(conf_missing==true){
+        send(clients[n],"HTTP/1.1 500 Internal Server Error",34,0);
+        goto shut;
+    }
+
 
 	if (rcvd<0)    // receive error
 		fprintf(stderr,("recv() error\n"));
@@ -288,7 +310,7 @@ void respond(int n)
                         printf("data_to_send:\n%s\n",data_to_send);
                         //Send the data to the client
                         send(clients[n], data_to_send, strlen(data_to_send),0);
-                    }   // write(clients[n], "HTTP/1.0 404 Not Found\n", 23); //FILE NOT FOUND
+                    }
                 }
 			}
 		}
@@ -385,7 +407,8 @@ void respond(int n)
                         //Search for the blank line
                         POST_DATA=copy;
                         while((POST_DATA = strchr(++POST_DATA,'\n'))!=NULL){
-                            if((strchr(++POST_DATA,'\n') - POST_DATA)==1)
+                            //printf("\nSearching: %s",POST_DATA);
+                            if((strchr(POST_DATA+1,'\n') - POST_DATA)==1)
                                 break;
                         };
                         if(POST_DATA == NULL)
@@ -510,7 +533,7 @@ void respond(int n)
 	}
 
 	//Closing SOCKET
-	shutdown (clients[n], SHUT_RDWR);         //All further send and recieve operations are DISABLED...
+shut:shutdown (clients[n], SHUT_RDWR);         //All further send and recieve operations are DISABLED
 	close(clients[n]);
 	clients[n]=-1;
 }
@@ -528,7 +551,10 @@ char * getvalue(char item[]){
     fp = fopen("ws.conf","r");
     if(fp == NULL){
         printf("File does not exist\n");
+        conf_missing = true;
     }
+    else
+        conf_missing = false;
     while(fgets(line,sizeof(line),fp)!=NULL){
         if(line[0]=='#')
             continue;
