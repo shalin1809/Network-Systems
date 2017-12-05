@@ -27,6 +27,7 @@ void startServer(char *port);
 void respond(int slot);
 char * getvalue(char item[],char *file);
 int get_file_size(char *filename);
+bool checkInFile(char item[],char *file);
 
 
 
@@ -139,8 +140,11 @@ void respond(int conn){
     char website[1000], temp[512];
     char * webptr, *req_ptr;
     char * sendbuf = data_to_send;
+    char DNStemp[100];
     int rcvd;
     int offset;
+    struct sockaddr_in sockDNS;
+    FILE *DNSfile;
 
     //Reset the message buffer
 	memset( (void*)mesg, (int)'\0', 1500);
@@ -193,39 +197,68 @@ void respond(int conn){
             memset(&hints, 0, sizeof hints);
             hints.ai_family = AF_INET;  //To force IPv4
             hints.ai_socktype = SOCK_STREAM;
+//Check if the IP exists in the DNS cache
+            webptr = getvalue(website,"DNScache");
+            if(webptr == NULL){
 
-            //Lookup DNS to get the IP of the website
-            if ((rv = getaddrinfo(website, "80", &hints, &servinfo)) != 0){
-            fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-            exit(1);
-            }
+                //Lookup DNS to get the IP of the website
+                if ((rv = getaddrinfo(website, "80", &hints, &servinfo)) != 0){
+                    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+                    exit(1);
+                }
 
-            // loop through all the results and connect to the first we can
-            for(p = servinfo; p != NULL; p = p->ai_next) {
-                if ((soc = socket(p->ai_family, p->ai_socktype,
-                    p->ai_protocol)) == -1) {
+                // loop through all the results and connect to the first we can
+                for(p = servinfo; p != NULL; p = p->ai_next) {
+                    if ((soc = socket(p->ai_family, p->ai_socktype,p->ai_protocol)) == -1) {
                         perror("socket");
                         continue;
+                    }
+
+                    if (connect(soc, p->ai_addr, p->ai_addrlen) == -1) {
+                        perror("connect");
+                        close(soc);
+                        continue;
+                    }
+                    //Copy the socket structure
+                    memcpy(&sockDNS,p->ai_addr,sizeof(sockDNS));
+                    //prepare a temp buffer with the website name and IP address
+                    sprintf(DNStemp,"%s %s\n",website,inet_ntoa(sockDNS.sin_addr));
+                    //Open the file in append mode
+                    DNSfile = fopen("DNScache","a");
+                    //Add the new found IP to the file
+                    fwrite(DNStemp,sizeof(char),strlen(DNStemp),DNSfile);
+                    printf("Connected to %s:%hd\n",inet_ntoa(sockDNS.sin_addr),ntohs(sockDNS.sin_port));
+                    fclose(DNSfile);
+                    break; // if we get here, we must have connected successfully
                 }
 
-                if (connect(soc, p->ai_addr, p->ai_addrlen) == -1) {
+                if (p == NULL) {
+                    // looped off the end of the list with no connection
+                    fprintf(stderr, "failed to connect\n");
+                    exit(2);
+//TODO: Reply Not found error
+                }
+
+                freeaddrinfo(servinfo); // all done with this structure
+            }
+            //Found the website in DNScache, use that to connect
+            else{
+                printf("Website %s found in cache: %s\n",website,webptr);
+                sockDNS.sin_family = AF_INET;
+                sockDNS.sin_port = htons(80);
+                sockDNS.sin_addr.s_addr = inet_addr(webptr);
+                if((soc = socket(AF_INET, SOCK_STREAM,0)) == -1) {
+                    perror("socket");
+                }
+
+                if(connect(soc,(struct sockaddr *)&sockDNS,sizeof(sockDNS)) == -1){
                     perror("connect");
                     close(soc);
-                    continue;
-                }
-
-                printf("Connected to %s\n",reqline[2]);
-                break; // if we get here, we must have connected successfully
-            }
-
-            if (p == NULL) {
-                // looped off the end of the list with no connection
-                fprintf(stderr, "failed to connect\n");
-                exit(2);
+                    fprintf(stderr, "failed to connect\n");
+                    exit(2);
 //TODO: Reply Not found error
+                }
             }
-
-            freeaddrinfo(servinfo); // all done with this structure
 
 
 
@@ -268,8 +301,7 @@ void respond(int conn){
             //Receive the data from the website
             while((rcvd = recv(soc, data_received, sizeof(data_received), 0))){
                 printf("\n\nData bytes %d and message received from website:\n%s\n",rcvd,data_received);
-                //Close the socket used to connect to the website
-
+//TODO: Add site caching code here
                 //Prepare the packet to be sent
                 bzero(data_to_send,sizeof(data_to_send));
                 // offset = sprintf(sendbuf,"%s 200 OK\n",reqline[2]);
@@ -278,10 +310,11 @@ void respond(int conn){
                 send(clients[conn], data_received, rcvd,0);
             }
 
+            //Close the socket used to connect to the website
             close(soc);
         }
         else{
-//TODO: Send HTTP/1.1 400 Bad Request
+//Send HTTP/1.1 400 Bad Request
             if((req_ptr = strchr(reqline[0],'\r'))!=NULL)   //If only the method is specified
                 strcpy(req_ptr,"\0");
             bzero(data_to_send,sizeof(data_to_send));
@@ -360,4 +393,31 @@ char * getvalue(char item[],char *file){
     fclose(fp);
     printf("Item %s not found\n",item);
     return NULL;
+}
+
+bool checkInFile(char item[],char *file){
+    if(item == NULL){
+        printf("Invalid input\n");
+        return false;
+    }
+    FILE *fp;
+    fp = fopen(file,"r");
+    if(fp == NULL){
+        printf("File %s does not exist for item %s \n",file,item);
+        return false;
+    }
+    else{
+        while(fgets(line,sizeof(line),fp)!=NULL){
+            if(line[0]=='#')
+                continue;
+            if((strncmp(line,item,strlen(item)))==0){
+                printf("The item %s is available is %s\n",item,file);
+                fclose(fp);
+                return true;
+            }
+        }
+    }
+    fclose(fp);
+    printf("Item %s not found\n",item);
+    return false;
 }
