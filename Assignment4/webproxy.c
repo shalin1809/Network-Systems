@@ -27,7 +27,7 @@ void startServer(char *port);
 void respond(int slot);
 char * getvalue(char item[],char *file);
 int get_file_size(char *filename);
-bool checkInFile(char item[],char *file);
+int checkInFile(char item[],char *file);
 
 
 
@@ -190,6 +190,32 @@ void respond(int conn){
             *(strchr(website,'/')) = '\0';
             printf("Website: %s\n",website);
 
+            //Check if website is blocked
+            if(checkInFile(website,"BlockedList")){
+                bzero(data_to_send,sizeof(data_to_send));
+                //Prepare the send buffer with the bad request header
+                offset = sprintf(sendbuf,"HTTP/1.1 403 Forbidden\n");
+                sendbuf+=offset;
+                //Append content type
+                offset = sprintf(sendbuf,"Content-Type: .html\n");
+                sendbuf+=offset;
+                bzero(temp,sizeof(&temp));
+                //Create the html file content
+                strcpy(temp,"<html><body>ERROR 403 Forbidden");
+                strcat(temp,"</body></html>");
+                printf("Temp buffer: %s\n",temp);
+                //Append content length
+                offset = sprintf(sendbuf,"Content-Length: %d\n\n",(int)strlen(temp));
+                sendbuf+=offset;
+                //Append the html content
+                strcpy(sendbuf,temp);
+                //Print the data_to_send for debugging
+                printf("data_to_send:\n%s\n",data_to_send);
+                //Send the data to the client
+                send(clients[conn], data_to_send, strlen(data_to_send),0);
+                goto shut;
+            }
+
             int soc;
             struct addrinfo hints, *servinfo, *p;
             int rv;
@@ -197,7 +223,7 @@ void respond(int conn){
             memset(&hints, 0, sizeof hints);
             hints.ai_family = AF_INET;  //To force IPv4
             hints.ai_socktype = SOCK_STREAM;
-//Check if the IP exists in the DNS cache
+            //Check if the IP exists in the DNS cache
             webptr = getvalue(website,"DNScache");
             if(webptr == NULL){
 
@@ -261,41 +287,6 @@ void respond(int conn){
             }
 
 
-
-            //Get host IP address using hostname
-//             struct hostent * hostinfo;
-//             printf("Waiting for gethost\n");
-//             hostinfo = gethostbyname(reqline[2]);
-//             if(hostinfo == NULL){
-//             printf("Host not found\n");
-// //TODO: Send not found error
-//             //Closing SOCKET
-//             printf("Closing socket\n");
-//             shutdown (clients[conn], SHUT_RDWR);         //All further send and recieve operations are DISABLED
-//             close(clients[conn]);
-//             clients[conn]=-1;
-//             }
-//
-//             //Create a new socket to connect to the website
-//             struct sockaddr_in websock;
-//             websock.sin_family = AF_INET;
-//             websock.sin_port = 80;
-//             websock.sin_addr.s_addr = *((unsigned long *)hostinfo->h_addr);
-//             int soc;
-//             if ((soc = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-//             {
-//                 perror("Could not create socket()");
-//
-// //TODO: Send could not connect error
-//
-//             }
-//
-//             //Connect to the website
-//             if(connect(soc,(struct sockaddr *)&websock, sizeof(websock)) < 0){
-//                 perror("Could not connect to website");
-// //TODO: Send could not connect error
-//             }
-
             //Send the GET request to the website
             send(soc, copy, rcvd,0);
             //Receive the data from the website
@@ -343,7 +334,7 @@ void respond(int conn){
     }
 
     //Closing SOCKET
-    printf("Closing socket\n");
+shut:printf("Closing socket\n");
     shutdown (clients[conn], SHUT_RDWR);         //All further send and recieve operations are DISABLED
     close(clients[conn]);
     clients[conn]=-1;
@@ -395,16 +386,16 @@ char * getvalue(char item[],char *file){
     return NULL;
 }
 
-bool checkInFile(char item[],char *file){
+int checkInFile(char item[],char *file){
     if(item == NULL){
         printf("Invalid input\n");
-        return false;
+        return 0;
     }
     FILE *fp;
     fp = fopen(file,"r");
     if(fp == NULL){
         printf("File %s does not exist for item %s \n",file,item);
-        return false;
+        return 0;
     }
     else{
         while(fgets(line,sizeof(line),fp)!=NULL){
@@ -413,11 +404,11 @@ bool checkInFile(char item[],char *file){
             if((strncmp(line,item,strlen(item)))==0){
                 printf("The item %s is available is %s\n",item,file);
                 fclose(fp);
-                return true;
+                return 1;
             }
         }
     }
     fclose(fp);
     printf("Item %s not found\n",item);
-    return false;
+    return 0;
 }
