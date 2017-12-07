@@ -12,6 +12,7 @@
 #include<stdint.h>
 #include<stdbool.h>
 #include<openssl/md5.h>
+#include<time.h>
 
 #define CONNMAX 1000
 #define BYTES 1024
@@ -29,7 +30,7 @@ void respond(int slot);
 char * getvalue(char item[],char *file);
 int get_file_size(char *filename);
 int checkInFile(char item[],char *file);
-
+int secondsSinceModified(char * filename);
 
 
 int main(int argc, char * argv[]){
@@ -303,7 +304,7 @@ siteblocked:    bzero(data_to_send,sizeof(data_to_send));
             SITEfile = fopen(hashedASCII,"r");
             if(SITEfile == NULL){   //Cached file does not exist
                 //Send the GET request to the website
-                send(soc, copy, rcvd,0);
+cachenew:       send(soc, copy, rcvd,0);
                 //Delete the cached file if it exists
                 remove(hashedASCII);
                 //Create a new file with the website's URL as name
@@ -322,10 +323,16 @@ siteblocked:    bzero(data_to_send,sizeof(data_to_send));
                 close(soc);
             }
             else{   //Cached file exists
-//TODO: Check for cached file timeout here
+                printf("\n****************Cached file exists*************\n\n");
+                int seconds = secondsSinceModified(hashedASCII);
+                printf("Time since last modified: %d seconds\n",seconds );
+                if(seconds > timeout){  //The cached file has expired
+                    printf("Cached file expired: %d\n",secondsSinceModified(hashedASCII));
+                    //Neglect the cached file and get new file
+                    goto cachenew;
+                }
                 int filesize = get_file_size(hashedASCII);
                 int packet, max_packets = filesize/1500;
-                printf("\n****************Cached file exists*************\n\n");
                 for(packet = 0 ;packet<=max_packets;packet++){
                     //Prepare the packet to be sent
                     bzero(data_to_send,sizeof(data_to_send));
@@ -423,6 +430,7 @@ char * getvalue(char item[],char *file){
     return NULL;
 }
 
+
 int checkInFile(char item[],char *file){
     if(item == NULL){
         printf("Invalid input\n");
@@ -448,4 +456,14 @@ int checkInFile(char item[],char *file){
     fclose(fp);
     printf("Item %s not found\n",item);
     return 0;
+}
+
+
+int secondsSinceModified(char * filename){
+    struct stat buf;
+    time_t currenttime;
+    if(stat(filename, &buf)==-1)
+        return -1;
+    currenttime = time(NULL);
+    return (int)(currenttime - buf.st_mtime);
 }
